@@ -16,7 +16,7 @@ This repository contains R code snippets, used to generate data visualizations p
 
 -   [Entso-E Transparency Platform](https://newtransparency.entsoe.eu/) (dataset 12.1.D_r3 "Energy Prices", downloaded via [sftp](https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge%20base/SFTP-Transparency_Docs.html))
 
-[![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png){alt="Linkedin"}](#0 "External link to LinkedIn contribution") [Initial contribution on LinkedIn](https://www.linkedin.com/posts/nicoschoutteet_did-you-know-negative-electricity-market-activity-7242049959141728257-9GJu? "External link to LinkedIn contribution")
+[![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png)](#0 "External link to LinkedIn contribution") [Initial contribution on LinkedIn](https://www.linkedin.com/posts/nicoschoutteet_did-you-know-negative-electricity-market-activity-7242049959141728257-9GJu? "External link to LinkedIn contribution")
 
 ## 06 Nov. 2024: Non-intuitive market coupling results in Core DA FBMC
 
