@@ -1,2 +1,5 @@
 # dataviz-linkedin
-Public repository with source code for contributions made on LinkedIn
+
+This repository contains R code snippets, used to generate data visualizations posted on LinkedIn
+
+
