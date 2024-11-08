@@ -2,6 +2,7 @@ library(tidyverse)
 #devtools::install_github("nicoschoutteet/JAOPuTo")
 library(JAOPuTo)
 
+setwd(".")
 
 # Use input data from Entso-E (dataset 12.1.D_r3 on energy prices, available via sftp)
 # df_prices <- plyr::ldply(.data = list.files("U:/Electricity/EM Monitoring/EMTP/energy prices",
