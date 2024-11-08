@@ -1,6 +1,7 @@
 # dataviz-linkedin
 
-This repository contains R code snippets, used to generate data visualizations posted on LinkedIn
+This repository contains R code snippets, used to generate data visualizations posted on [![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png)
+LinkedIn](https://www.linkedin.com/in/nicoschoutteet/ "External link to LinkedIn profile")
 
 ## 06 Nov. 2024: Non-intuitive market coupling results in Core DA FBMC
 
