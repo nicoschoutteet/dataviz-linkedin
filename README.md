@@ -1,14 +1,14 @@
 # dataviz-linkedin
 
-This repository contains R code snippets, used to generate data visualizations posted on LinkedIn
+This repository contains R code snippets, used to generate data visualizations posted on [![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png) LinkedIn](https://www.linkedin.com/in/nicoschoutteet/ "External link to LinkedIn profile")
 
 ## 18 Sep. 2024: Negative prices in CWE intraday markets
 
-![](output/20240918 - occurrence of negative prices.png)
+![](output/20240918%20-%20occurrence%20of%20negative%20prices.png)
 
-![](output/20240918 - concurrence of negative prices.png)
+![](output/20240918%20-%20concurrence%20of%20negative%20prices.png)
 
-👩‍💻 source code: [R/20240918 - negative intraday prices.R](R/20240918 - negative intraday prices.R)
+👩‍💻 source code: [R/20240918 - negative intraday prices.R](R/20240918%20-%20negative%20intraday%20prices.R)
 
 🔢 data sources:
 
