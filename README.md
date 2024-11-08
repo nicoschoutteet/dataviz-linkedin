@@ -4,8 +4,6 @@ This repository contains R code snippets, used to generate data visualizations p
 
 ## 06 Nov. 2024: Non-intuitive market coupling results in Core DA FBMC
 
-\<\<\<\<\<\<\< HEAD
-
 ![](output/20241106%20-%20Core%20prices%20and%20net%20positions%20monthly%20ranking.png)
 
 👩‍💻 source code: [R/20241106 - counterintuitive results.R](R/20241106%20-%20counterintuitive%20results.R)
