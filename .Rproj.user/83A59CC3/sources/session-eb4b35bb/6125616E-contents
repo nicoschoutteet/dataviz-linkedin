@@ -1,0 +1,202 @@
+library(tidyverse)
+library(CREG)
+
+df_IDA1 <- read_csv("U:/Electricity/EM Monitoring/EMPX Power exchange data/EPEX SPOT/belgium/Intraday Auction/Pan-European IDA1/Current/Prices_Volumes/pan-european_prices_belgium_IDA1_2024.csv",
+                    skip = 1) %>% 
+  select(`Delivery day`, starts_with("Hour")) %>% 
+  pivot_longer(-`Delivery day`,
+               names_to = "Hour",
+               values_to = "Price") %>% 
+  na.omit(Price) %>% 
+  mutate(Date = as.Date(`Delivery day`, "%d/%m/%Y"),
+         Hour = case_when(str_split_i(Hour, " ", 2)  == "3A" ~ str_replace(Hour, "Hour 3A", "Hour 3"),
+                          str_split_i(Hour, " ", 2)  == "3B" ~ str_replace(Hour, "Hour 3B", "Hour 3"),
+                          TRUE ~ Hour),
+         DateTime = make_datetime(year = year(Date),
+                                  month = month(Date),
+                                  day = day(Date),
+                                  hour = as.numeric(str_split_i(Hour, " ", i = 2)) - 1,
+                                  min = (as.numeric(str_remove(str_split_i(Hour, " ", i = 3), "Q")) - 1) * 15,
+                                  tz = "Europe/Brussels"),
+         Auction = "IDA 1") %>% 
+  select(DateTime, Auction, Price)
+
+
+df_IDA2 <- read_csv("U:/Electricity/EM Monitoring/EMPX Power exchange data/EPEX SPOT/belgium/Intraday Auction/Pan-European IDA2/Current/Prices_Volumes/pan-european_prices_belgium_IDA2_2024.csv",
+                    skip = 1) %>% 
+  select(`Delivery day`, starts_with("Hour")) %>% 
+  pivot_longer(-`Delivery day`,
+               names_to = "Hour",
+               values_to = "Price") %>% 
+  na.omit(Price) %>% 
+  mutate(Date = as.Date(`Delivery day`, "%d/%m/%Y"),
+         Hour = case_when(str_split_i(Hour, " ", 2)  == "3A" ~ str_replace(Hour, "Hour 3A", "Hour 3"),
+                          str_split_i(Hour, " ", 2)  == "3B" ~ str_replace(Hour, "Hour 3B", "Hour 3"),
+                          TRUE ~ Hour),
+         DateTime = make_datetime(year = year(Date),
+                                  month = month(Date),
+                                  day = day(Date),
+                                  hour = as.numeric(str_split_i(Hour, " ", i = 2)) - 1,
+                                  min = (as.numeric(str_remove(str_split_i(Hour, " ", i = 3), "Q")) - 1) * 15,
+                                  tz = "Europe/Brussels"),
+         Auction = "IDA 2") %>% 
+  select(DateTime, Auction, Price)
+
+df_IDA3 <- read_csv("U:/Electricity/EM Monitoring/EMPX Power exchange data/EPEX SPOT/belgium/Intraday Auction/Pan-European IDA3/Current/Prices_Volumes/pan-european_prices_belgium_IDA3_2024.csv",
+                    skip = 1) %>% 
+  select(`Delivery day`, starts_with("Hour")) %>% 
+  pivot_longer(-`Delivery day`,
+               names_to = "Hour",
+               values_to = "Price") %>% 
+  na.omit(Price) %>% 
+  mutate(Date = as.Date(`Delivery day`, "%d/%m/%Y"),
+         Hour = case_when(str_split_i(Hour, " ", 2)  == "3A" ~ str_replace(Hour, "Hour 3A", "Hour 3"),
+                          str_split_i(Hour, " ", 2)  == "3B" ~ str_replace(Hour, "Hour 3B", "Hour 3"),
+                          TRUE ~ Hour),
+         DateTime = make_datetime(year = year(Date),
+                                  month = month(Date),
+                                  day = day(Date),
+                                  hour = as.numeric(str_split_i(Hour, " ", i = 2)) - 1,
+                                  min = (as.numeric(str_remove(str_split_i(Hour, " ", i = 3), "Q")) - 1) * 15,
+                                  tz = "Europe/Brussels"),
+         Auction = "IDA 3") %>% 
+  select(DateTime, Auction, Price)
+
+df_DA <- read_csv("data/Core day ahead prices.csv") %>% 
+  filter(BiddingZone == "BE",
+         DateTime >= as.POSIXct("2024-06-15 00:00", "Europe/Brussels")) %>% 
+  mutate(DateTime = with_tz(DateTime, "Europe/Brussels"),
+         Auction = "DA") %>% 
+  select(DateTime, Auction, Price)
+
+expand_to_quarter_hour <- function(row) {
+  # Generate quarter-hour intervals (0, 15, 30, 45 minutes)
+  intervals <- seq(from = 0, to = 45, by = 15)
+  
+  # Create a new DateTime for each quarter-hour and replicate the Price
+  new_rows <- data.frame(
+    DateTime = row$DateTime + minutes(intervals),
+    Auction = rep(row$Auction, length(intervals)),
+    Price = rep(row$Price, length(intervals))
+  )
+  
+  return(new_rows)
+}
+
+df <- rbind(df_DA %>% 
+              rowwise() %>% 
+              do(expand_to_quarter_hour(.)), df_IDA1, df_IDA2, df_IDA3) %>% 
+  write_csv("data/Belgium DA_IDA123 prices.csv")
+
+rm(list = setdiff(ls(), "df"))
+
+# hourly to quarter-hourly ------------------------------------------------
+
+
+df %>% 
+  group_by(Auction) %>% 
+  summarize(NegHours = sum(Price < 0, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(Auction = case_match(Auction, "DA" ~ "DA*",
+                              .default = Auction)) %>% 
+  ggplot(mapping = aes(x = Auction, y = NegHours, label = format(NegHours, big.mark = ".", decimal.mark = ","))) +
+  geom_col(fill = CREG_blue1) +
+  geom_text(nudge_y = 50, vjust = 0, size = 2.5) +
+  scale_x_discrete(name = element_blank()) +
+  scale_y_continuous(name = element_blank(),
+                     breaks = seq(0, 1250, 250),
+                     labels = c(format(seq(0, 1000, 250), big.mark = ".", decimal.mark = ","), "1.250\nquarter-hours"),
+                     expand = c(0, 0)) +
+  labs(title = "Quarter-hours with negative prices in different auctions",
+       subtitle = "Number of quarter-hours with negative prices in Belgian day-ahead and intraday auctions, since 15 June 2024",
+       caption = "Source: calculations CREG based on data EPEX SPOT\nNote: Value associated to day-ahead auctions is multiplied by 4, in order to compare the hourly resolution of the day-ahead market with the quarter-hourly resolution\nof the intraday market") +
+  coord_cartesian(ylim = c(0, 1250)) +
+  theme_CREG() +
+  theme(axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = margin(.2, 1, .2, .2, "cm"),
+        panel.grid.major.x = element_blank())
+
+ggsave("output/DA_IDA negative quarter-hours.png",
+       width = 16, height = 10, units = "cm", dpi = 900)
+
+
+# correlation matrix ------------------------------------------------------
+df_correlation <- df %>% 
+  pivot_wider(names_from = "Auction",
+              values_from = "Price") %>% 
+  filter(DA < 0) %>% 
+  group_by() %>% 
+  summarize("DA_neg" = sum(DA < 0, na.rm = TRUE) / sum(DA < 0, na.rm = TRUE),
+            "IDA 1_neg" = sum(`IDA 1` < 0, na.rm = TRUE) / sum(DA < 0, na.rm = TRUE),
+            "IDA 2_neg" = sum(`IDA 2` < 0, na.rm = TRUE) / sum(DA < 0, na.rm = TRUE),
+            "IDA 3_neg" = sum(`IDA 3` < 0,na.rm = TRUE) / sum(DA < 0 & between(hour(DateTime), 12, 23), na.rm = TRUE)) %>% 
+  rbind(df %>% 
+          pivot_wider(names_from = "Auction",
+                      values_from = "Price") %>% 
+          filter(`IDA 1` < 0) %>% 
+          group_by() %>% 
+          summarize("DA_neg" = sum(DA < 0, na.rm = TRUE) / sum(`IDA 1`  < 0, na.rm = TRUE),
+                    "IDA 1_neg" = sum(`IDA 1` < 0, na.rm = TRUE) / sum(`IDA 1` < 0, na.rm = TRUE),
+                    "IDA 2_neg" = sum(`IDA 2` < 0, na.rm = TRUE) / sum(`IDA 1` < 0, na.rm = TRUE),
+                    "IDA 3_neg" = sum(`IDA 3` < 0,na.rm = TRUE) / sum(`IDA 1` < 0 & between(hour(DateTime), 12, 23), na.rm = TRUE))) %>% 
+  rbind(df %>% 
+          pivot_wider(names_from = "Auction",
+                      values_from = "Price") %>% 
+          filter(`IDA 2` < 0) %>% 
+          group_by() %>% 
+          summarize("DA_neg" = sum(DA < 0, na.rm = TRUE) / sum(`IDA 2`  < 0, na.rm = TRUE),
+                    "IDA 1_neg" = sum(`IDA 1` < 0, na.rm = TRUE) / sum(`IDA 2` < 0, na.rm = TRUE),
+                    "IDA 2_neg" = sum(`IDA 2` < 0, na.rm = TRUE) / sum(`IDA 2` < 0, na.rm = TRUE),
+                    "IDA 3_neg" = sum(`IDA 3` < 0,na.rm = TRUE) / sum(`IDA 2` < 0 & between(hour(DateTime), 12, 23), na.rm = TRUE))) %>% 
+  rbind(df %>% 
+          pivot_wider(names_from = "Auction",
+                      values_from = "Price") %>% 
+          filter(`IDA 3` < 0) %>% 
+          group_by() %>% 
+          summarize("DA_neg" = sum(DA < 0, na.rm = TRUE) / sum(`IDA 3`  < 0, na.rm = TRUE),
+                    "IDA 1_neg" = sum(`IDA 1` < 0, na.rm = TRUE) / sum(`IDA 3` < 0, na.rm = TRUE),
+                    "IDA 2_neg" = sum(`IDA 2` < 0, na.rm = TRUE) / sum(`IDA 3` < 0, na.rm = TRUE),
+                    "IDA 3_neg" = sum(`IDA 3` < 0,na.rm = TRUE) / sum(`IDA 3` < 0 & between(hour(DateTime), 12, 23), na.rm = TRUE))) %>% 
+  mutate(From = case_when(`DA_neg` == 1 ~ "DA",
+                          `IDA 1_neg` == 1 ~ "IDA 1",
+                          `IDA 2_neg` == 1 ~ "IDA 2",
+                          `IDA 3_neg` == 1 ~ "IDA 3")) %>% 
+  pivot_longer(-From,
+               names_to = "To",
+               values_to = "Correlation") %>% 
+  mutate(To = factor(str_remove(To, "_neg"), levels = c("DA", "IDA 1", "IDA 2", "IDA 3")),
+         From = factor(From, levels = c("IDA 3", "IDA 2", "IDA 1", "DA")))
+
+ggplot(data = df_correlation,
+       mapping = aes(y = From, x = To, fill = Correlation, label = scales::percent(Correlation, accuracy = .1, decimal.mark = ",")), size = 2) +
+  geom_tile(colour = "white", linewidth = .25) +
+  geom_tile(data = filter(df_correlation, From == "IDA 1", To == "IDA 3"),
+            inherit.aes = FALSE,
+            mapping = aes(y = From, x = To),
+            fill = NA, colour = "black", linetype = "dashed", linewidth = .25) +
+  geom_text(colour = "black", size = 2.75) +
+  annotate(geom = "text", size = 2.5,
+            x = 5.5, y = 3, label = "Example:\nDuring 68,4% of all negative quarter-hours in IDA1,\nprices cleared negative in IDA3", hjust = 0) +
+  annotate(geom = "segment",
+           x = 5.4, xend = 4.6,
+           y = 3, yend = 3,
+           arrow = arrow(length = unit(.1, "cm"), type = "closed"),
+           linewidth = .1) +
+  scale_fill_gradientn(name = element_blank(),
+                       colours = c(CREG_red, "white", CREG_blue2, CREG_grey1)) +
+  scale_y_discrete(name = element_blank()) +
+  scale_x_discrete(name = element_blank()) +
+  labs(title = "Concurrence of negative prices in different auctions",
+       subtitle = "Share of quarter-hours with negative prices in an auction, when prices in another auction are negative",
+       caption = "Source: calculations CREG based on data EPEX SPOT") +
+  coord_cartesian(xlim = c(1, 9)) +
+  theme_CREG() +
+  theme(axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid.major = element_blank(),
+        #plot.subtitle = element_text(margin = margin(.1, 0, 1.5, 0, "cm")),
+        legend.position = "none")
+                   
+ggsave("output/DA_IDA negative quarter-hours correlation matrix.png",
+       width = 16, height = 10, units = "cm", dpi = 900)

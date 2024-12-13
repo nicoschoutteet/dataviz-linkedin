@@ -1,0 +1,145 @@
+library(tidyverse)
+library(CREG)
+library(scales)
+library(patchwork)
+
+df_prices <- read_csv2("data/20150101-now Core prices.csv") %>% 
+  filter(BiddingZone == "Belgium" & (as.Date(DateTime) == as.Date("2023-05-28") | (as.Date(DateTime) == as.Date("2023-05-29") & hour(DateTime) == 0)))
+
+df_pricesarea <- df_prices %>% 
+  mutate(xmin = DateTime,
+         xmax = DateTime + hours(1),
+         ymin = case_when(Price < 0 ~ 0,
+                          Price == 0 ~ 0,
+                          Price > 0 ~ Price),
+         ymax = case_when(Price < 0 ~ Price,
+                          Price == 0 ~ 0,
+                          Price > 0 ~ 0),
+         fill = case_when(Price <= 0 ~ "Negative",
+                          Price > 0 ~ "Positive"))
+
+(price <- ggplot(data = df_pricesarea,
+       mapping = aes(x = DateTime, y = Price)) +
+  geom_hline(yintercept = 0) +
+  geom_rect(mapping = aes(xmin = xmin,
+                          xmax = xmax,
+                          ymin = ymin,
+                          ymax = ymax,
+                          fill = fill),
+            alpha = .4) +
+  geom_step(colour = CREG_blue2) +
+  annotate(geom = "text",
+           label = c("Negative price leading\nto negative remuneration\n(money to be paid by consumer)",
+                     "Positive price leading\nto positive remuneration\n(money received by consumer)"),
+           x = c(as.POSIXct("2023-05-28 07:00", "UTC"),
+                 as.POSIXct("2023-05-28 12:00", "UTC")),
+           y = c(-25, 45),
+           hjust = .5, size = 2.5) +
+  annotate(geom = "curve",
+            x = c(as.POSIXct("2023-05-28 07:00", "UTC"),
+                  as.POSIXct("2023-05-28 12:00", "UTC")),
+            xend = c(as.POSIXct("2023-05-28 10:50", "UTC"),
+                     as.POSIXct("2023-05-28 15:50", "UTC")),
+            y = c(-38, 32),
+            yend = c(-43, 25),
+            curvature = .4,
+           arrow = arrow(length = unit(.1, "cm")),
+           linewidth = .25) +
+  scale_fill_manual(name = element_blank(),
+                    values = c("Negative" = CREG_red,
+                               "Positive" = CREG_green)) +
+  scale_x_datetime(name = element_blank(),
+                   breaks = breaks_width(width = "hour"),
+                   labels = date_format("%k")) +
+  scale_y_continuous(name = element_blank(),
+                     breaks = seq(-50, 100, 25),
+                     labels = c("-50", "-25", "0", "25", "50", "75", "100 €/MWh")) +
+  coord_cartesian(xlim = c(as.POSIXct("2023-05-28 00:00", "UTC"),
+                           as.POSIXct("2023-05-28 23:58", "UTC")),
+                  ylim = c(-50.5, 100),
+                  expand = FALSE) +
+  theme_CREG() +
+  theme(axis.line.x = element_blank(),
+        legend.position = "none")
+)
+
+df_inj <- df_prices %>% 
+  select(DateTime) %>% 
+  mutate(Injection = c(0, 0, 0, 0, 0, 0,
+                        100, 300, 700, 1200, 1800, 2100, 2400, 2600, 2700, 
+                        2600, 2300, 1900, 1400, 900, 300, 100, 0, 0, 0))
+
+
+df_injarea <- df_inj %>% 
+  mutate(xmin = DateTime,
+         xmax = DateTime + hours(1),
+         ymin = case_when(Injection < 0 ~ 0,
+                          Injection == 0 ~ 0,
+                          Injection > 0 ~ Injection),
+         ymax = case_when(Injection < 0 ~ Injection,
+                          Injection == 0 ~ 0,
+                          Injection > 0 ~ 0),
+         fill = case_when(Injection <= 0 ~ "Negative",
+                          Injection > 0 ~ "Positive"))
+
+(injection <- ggplot(data = df_injarea,
+       mapping = aes(x = DateTime, y = Injection / 1000)) +
+    geom_rect(mapping = aes(xmin = xmin,
+                            xmax = xmax,
+                            ymin = ymin / 1000,
+                            ymax = ymax / 1000),
+              alpha = .2, fill = CREG_yellow) +
+  geom_step(colour = CREG_yellow) +
+    annotate(geom = "text",
+             label = "hypothetical hourly injection profile\nof a 3 kWp solar PV installation",
+             x = as.POSIXct("2023-05-28 04:00", "UTC"),
+             y = 1.5,
+             hjust = .5, size = 2.5) +
+    annotate(geom = "text",
+             label = paste0("total injection = ", 
+                            format(sum(df_injarea$Injection) / 1000, decimal.mark = ","),
+                            " kWh"),
+             x = as.POSIXct("2023-05-28 14:00", "UTC"),
+             y = 1,
+             hjust = .5, size = 2.5) +
+    annotate(geom = "curve",
+             x = as.POSIXct("2023-05-28 04:00", "UTC"),
+             xend = as.POSIXct("2023-05-28 07:30", "UTC"),
+             y = 1.2,
+             yend = .6,
+             curvature = .4,
+             arrow = arrow(length = unit(.1, "cm")),
+             linewidth = .25) +
+  scale_x_datetime(name = element_blank(),
+                                                   breaks = breaks_width(width = "hour"),
+                                                   labels = date_format("%k")) +
+  scale_y_continuous(name = element_blank(),
+                     labels = number_format(suffix = " kW")) +
+  coord_cartesian(xlim = c(as.POSIXct("2023-05-28 00:00", "UTC"),
+                           as.POSIXct("2023-05-28 23:58", "UTC")),
+                  ylim = c(0, 3),
+                  expand = FALSE) +
+  theme_CREG() +
+  theme(legend.position = "none")
+)
+
+injection / price +
+  plot_annotation(title = "Example of remuneration from dynamic injection contract during day with negative prices",
+                  subtitle = "Hypothetical pay-outs from day-ahead price and solar PV production\n(assumptions: installation of 3 kWp, day-ahead prices are those observed on 28 May 2023)",
+                  caption = "Source: calculations CREG based on data Entso-E Transpareny Platform and hypothetical solar PV production") &
+  theme(text = element_text(size = 10), 
+        plot.title = element_text(size = rel(1), hjust = 0, colour = "#00B0B9"), 
+        plot.subtitle = element_text(size = rel(0.8), hjust = 0, 
+                                     margin = margin(0, 0, 0.5, 0, "cm")), plot.title.position = "plot", 
+        plot.caption = element_text(size = rel(0.6), hjust = 0, 
+                                    margin = margin(0, 0, 0.1, 0, "cm")), plot.caption.position = "plot", 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"))
+
+ggsave("output/dynamic injection contract example.png", 
+       width = 16, height = 18, units = "cm", dpi = 900)
+
+df <- df_prices %>% 
+  left_join(df_inj) %>% 
+  mutate(Remuneration = Price / 10 * Injection / 1000) %>% 
+  group_by(Price >= 0) %>% 
+  summarize(Remuneration = sum(Remuneration, na.rm = TRUE))

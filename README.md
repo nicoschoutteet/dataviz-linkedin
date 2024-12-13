@@ -30,4 +30,18 @@ This repository contains R code snippets, used to generate data visualizations p
 
 -   [Entso-E Transparency Platform](https://newtransparency.entsoe.eu/) (dataset 12.1.D_r3 "Energy Prices", downloaded via [sftp](https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge%20base/SFTP-Transparency_Docs.html))
 
+<<<<<<< Updated upstream
 [![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png)](#0 "External link to LinkedIn contribution") [Initial contribution on LinkedIn](https://www.linkedin.com/posts/nicoschoutteet_electricity-flows-from-low-priced-to-high-priced-activity-7259951574125350913-CElP? "External link to LinkedIn contribution")
+=======
+[![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png) Initial contribution on LinkedIn](https://www.linkedin.com/posts/nicoschoutteet_electricity-flows-from-low-priced-to-high-priced-activity-7259951574125350913-CElP? "External link to LinkedIn contribution")
+
+## 13 Dec. 2024: Comparison of 2022 - 2024 day-ahead price levels in Belgium
+
+![](output/20241213%20-%20comparison%202022%20-%202024%20DA%20prices%20Belgium.png)
+
+👩‍💻 source code: [R/20241213 - comparison 2022 - 2024 DA prices Belgium.R](R/20241213 - comparison 2022 - 2024 DA prices Belgium.R)
+
+🔢 data sources: [Nord Pool Data Portal](https://data.nordpoolgroup.com/auction/day-ahead/prices?deliveryDate=latest&currency=EUR&aggregation=DeliveryPeriod&deliveryAreas=BE,FR,GER,NL)
+
+[![Linkedin](https://cdn4.iconfinder.com/data/icons/social-media-flat-7/64/Social-media_LinkedIn-16.png){alt="Linkedin"}](#0 "External link to LinkedIn contribution") [Initial contribution on LinkedIn](https://www.linkedin.com/posts/nicoschoutteet_wholesale-electricity-prices-are-increasing-activity-7273268935750307841-G7Vr?utm_source=share&utm_medium=member_desktop)
+>>>>>>> Stashed changes

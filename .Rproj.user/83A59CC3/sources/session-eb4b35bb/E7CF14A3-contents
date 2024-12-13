@@ -1,0 +1,247 @@
+# libraries ---------------------------------------------------------------
+library(tidyverse)
+library(CREG)
+library(patchwork)
+
+# data download(s) --------------------------------------------------------
+#CIPU
+list_gen <- httr::GET("https://opendata.elia.be/api/explore/v2.1/catalog/datasets/ods033/records?select=sum%28generatedpower%29&group_by=year%28datetime%29%2C%20fuelcode&limit=1000&offset=0&timezone=UTC&include_links=false&include_app_metas=false") %>%
+  httr::content()
+
+df_gen <- do.call(rbind, list_gen$results) %>%
+  as_tibble() %>%
+  unnest(everything()) %>%
+  mutate(Fuel = recode(`fuelcode`,
+                       "CP" = "Coal",
+                       "LF" = "Liquid Fuel",
+                       "NG" = "Natural Gas",
+                       "NU" = "Nuclear",
+                       "WA" = "Hydro",
+                       "WI" = "Wind"),
+         Generation = as.numeric(`sum(generatedpower)` / 4000000)) %>%
+  select(Year = `year(datetime)`, Fuel, Generation) %>%
+  filter(Fuel != "Wind",
+         Year != 2014)
+
+# Solar
+list_solar <- httr::GET("https://opendata.elia.be/api/explore/v2.1/catalog/datasets/ods032/exports/json?select=sum%28measured%29&group_by=year%28datetime%29%2C%20region&limit=-1&timezone=UTC&use_labels=false&epsg=4326") %>%
+  httr::content()
+
+df_solar <- do.call(rbind, list_solar) %>%
+  as_tibble() %>%
+  unnest(everything()) %>%
+  mutate(Generation = as.numeric(`sum(measured)`) / 4000000,
+         Fuel = "Solar") %>%
+  filter(region %in% c("Brussels", "Flanders", "Wallonia")) %>%
+  select(Year = `year(datetime)`, region, Fuel, Generation)  %>%
+  group_by(Year, Fuel) %>%
+  summarize(Generation = sum(Generation, na.rm = TRUE))
+
+# Wind
+list_wind <- httr::GET("https://opendata.elia.be/api/explore/v2.1/catalog/datasets/ods031/exports/json?select=sum%28measured%29&group_by=year%28datetime%29&limit=-1&timezone=UTC&use_labels=false&epsg=4326") %>%
+  httr::content()
+
+df_wind <- do.call(rbind, list_wind) %>%
+  as_tibble() %>%
+  unnest(everything()) %>%
+  mutate(Generation = as.numeric(`sum(measured)`) / 4000000,
+         Fuel = "Wind") %>%
+  select(Year = `year(datetime)`, Fuel, Generation)
+
+
+df <- rbind(df_gen, df_solar, df_wind) %>%
+  filter(Year > 2017,
+         !(Fuel %in% c("Coal", "Liquid Fuel")))
+
+# alternative: ETP
+read_BE_gen <- function(data) {
+
+  read_delim(data, delim = "\t") %>%
+    filter(AreaName == "BE CTY")
+
+}
+
+df <- plyr::ldply(.data = list.files("U:/Electricity/EM Monitoring/EMTP/generated energy", full.names = TRUE),
+                  .fun = read_BE_gen,
+                  .progress = "tk") %>%
+  mutate(Type = recode(ProductionType,
+                       "Fossil Gas" = "Natural Gas",
+                       "Biomass" = "Other",
+                       "Fossil Oil" = "Fossil",
+                       "Hydro Run-of-river and poundage" = "Hydro",
+                       "Fossil Hard coal" = "Fossil",
+                       "Hydro Pumped Storage" = "Hydro",
+                       "Solar" = "Solar",
+                       "Other" = "Other",
+                       "Wind Onshore" = "Wind Onshore",
+                       "Wind Offshore" = "Wind Offshore",
+                       "Waste" = "Other",
+                       "Nuclear" = "Nuclear")) %>%
+  group_by(DateTime, Type) %>%
+  summarize(Generation = sum(ActualGenerationOutput, na.rm = TRUE)) %>%
+  select(DateTime, Type, Generation) %>%
+  write_csv("data/ETP-generated-energy.csv")
+
+df <- read_csv("data/ETP-generated-energy.csv") %>% 
+  group_by(Year = year(DateTime), Fuel = Type) %>% 
+  summarize(Generation = sum(Generation, na.rm = TRUE) / 1000000) %>% 
+  filter(between(Year, 2015, 2023),
+         Fuel %in% c("Wind Offshore", "Wind Onshore", "Solar", "Other", "Nuclear", "Natural Gas", "Hydro"))
+
+# 02 - yearly generation --------------------------------------------------
+df_total <- df %>% 
+  group_by(Year) %>% 
+  summarize(Generation = sum(Generation, na.rm = TRUE))
+
+Language <- c("NL", "FR", "EN")
+Title = c("Geproduceerde elektriciteit",
+          "Électricité produite",
+          "Generated electricity")
+Subtitle = c("Jaarlijkse totale verbruikopgewekte elektriciteit per brandstoftype (in TWh)",
+             "Production d'électricité totale annuelle par type de carburant (en TWh)",
+             "Yearly total generated electricity per fuel type (in TWh)")
+Caption = c("Bron: berekeningen CREG o.b.v. data Entso-E Transparency Platform",
+            "Source: calculs CREG sur base des données Entso-E Transparency Platform",
+            "Source: calculations CREG based on data Entso-E Transparency Platform")
+
+for(i in 1:3) {
+  
+  ggplot(data = df,
+         mapping = aes(x = Year,
+                       y = Generation,
+                       colour = Fuel,
+                       fill = Fuel)) +
+    geom_col(position = position_stack(),
+             colour = NA) +
+    geom_text(data = df_total,
+              inherit.aes = FALSE,
+              mapping = aes(x = Year,
+                            y = Generation + 4,
+                            label = paste0(format(round(Generation, 1), decimal.mark = ","), " TWh")),
+              size = 2.5) +
+    geom_text(data = filter(df, Year == 2023),
+              mapping = aes(x = Year + .5, label = paste0(Fuel, ": ", 
+                                                          format(round(Generation, 1), decimal.mark = ","), " TWh")),
+              position = position_stack(vjust = .5),
+              hjust = 0, size = 2.5) +
+    scale_x_continuous(name = element_blank(),
+                       breaks = seq(2015, 2023, 1)) +
+    scale_y_continuous(name = element_blank(),
+                       breaks = seq(0, 100, 20),
+                       labels = scales::label_number(suffix = " TWh", big.mark = ".", decimal.mark = ","),
+                       expand = c(0, 0)) +
+    scale_fill_manual(name = element_blank(),
+                      values = c("Hydro" = CREG_blue1,
+                                 "Natural Gas" = CREG_blue2,
+                                 "Nuclear" = CREG_orange,
+                                 "Other" = CREG_grey1,
+                                 "Solar" = CREG_yellow,
+                                 "Wind Onshore" = CREG_green,
+                                 "Wind Offshore" = "#53ad27")) +
+    scale_colour_manual(name = element_blank(),
+                        values = c("Hydro" = CREG_blue1,
+                                   "Natural Gas" = CREG_blue2,
+                                   "Nuclear" = CREG_orange,
+                                   "Other" = CREG_grey2,
+                                   "Solar" = CREG_yellow,
+                                   "Wind Onshore" = CREG_green,
+                                   "Wind Offshore" = "#53ad27")) +
+    coord_cartesian(ylim = c(0, 100),
+                    clip = "off") +
+    labs(title = Title[i],
+         subtitle = Subtitle[i],
+         caption = Caption[i]) +
+    theme_CREG() +
+    theme(legend.position = "none",
+          plot.margin = margin(.2, 2.5, .2, .2, "cm"),
+          panel.grid.major = element_blank())
+  
+  ggsave(paste0("output/02 - yearly generation - ", Language[i], ".png"),
+         width = 16, height = 10, units = "cm", dpi = 900)
+  
+}
+
+# 02 - year-on-year evolution waterfall -----------------------------------
+df_change <- df %>% 
+  filter(Year %in% c(2022, 2023)) %>% 
+  mutate(Fuel = recode(Fuel, "Wind Offshore" = "Wind", "Wind Onshore" = "Wind", "Hydro" = "Other")) %>% 
+  group_by(Year, Fuel) %>% 
+  summarize(Generation = sum(Generation, na.rm = TRUE))
+
+df_total <- df_change %>% 
+  filter(Year %in% c(2022, 2023)) %>% 
+  group_by(Year) %>% 
+  summarize(Generation = sum(Generation, na.rm = TRUE)) %>% 
+  mutate(Type = "Total")
+
+df_waterfall <- data.frame(XLabel = "2022", Change = df_total$Generation[df_total$Year == 2022]) %>% 
+  rbind(c("Nuclear", df_change$Generation[df_change$Year == 2023 & df_change$Fuel == "Nuclear"] - df_change$Generation[df_change$Year == 2022 & df_change$Fuel == "Nuclear"]),
+        c("Gas", df_change$Generation[df_change$Year == 2023 & df_change$Fuel == "Natural Gas"] - df_change$Generation[df_change$Year == 2022 & df_change$Fuel == "Natural Gas"]),
+        c("Solar", df_change$Generation[df_change$Year == 2023 & df_change$Fuel == "Solar"] - df_change$Generation[df_change$Year == 2022 & df_change$Fuel == "Solar"]),
+        c("Wind", df_change$Generation[df_change$Year == 2023 & df_change$Fuel == "Wind"] - df_change$Generation[df_change$Year == 2022 & df_change$Fuel == "Wind"]),
+        c("Other", df_change$Generation[df_change$Year == 2023 & df_change$Fuel == "Other"] - df_change$Generation[df_change$Year == 2022 & df_change$Fuel == "Other"]),
+        c("2023", df_total$Generation[df_total$Year == 2023])) %>% 
+  mutate(ChangeColour = factor(case_when(XLabel %in% c("2022", "2023") ~ "grey",
+                                         Change > 0 ~ "blue",
+                                         Change <= 0 ~ "red")),
+         XLabel = factor(XLabel, levels = c("2022", "Nuclear", "Gas", "Solar", "Wind", "Other", "2023")),
+         Change = as.double(Change),
+         Base = case_when(XLabel %in% c("2022", "2023") ~ 0,
+                          Change > 0 ~ lag(cumsum(Change)),
+                          Change <= 0 ~ lag(cumsum(Change)) + Change)) %>% 
+  gather(Change, Base, key = "Column", value = "Value")
+
+Language = c("NL", "FR", "EN")
+Title = c("Wijziging in de productiemix",
+          "Évolution du mix de production",
+          "Evolution of the generation mix")
+Subtitle = c("Vergelijking van geproduceerde elektriciteit per brandstoftype tussen 2022 en 2023 (in TWh)",
+             "Comparaison de la production d'électricité par type de carburant entre 2022 et 2023 (en TWh)",
+             "Comparison of electricity generation per fuel source between 2022 and 2023 (in TWh)")
+Caption = c("Bron: berekeningen CREG o.b.v. data Entso-E Transparency Platform",
+            "Source: calculs CREG sur base des données Entso-E Transparency Platform",
+            "Source: calculations CREG based on data Entso-E Transparency Platform")
+Type = list(c("2022", "Nucleair", "Gas", "Zon", "Wind", "Andere", "2023"),
+            c("2022", "Nucléaire", "Gaz", "Solaire", "Éolienne", "Autres", "2023"),
+            c("2022", "Nuclear", "Gas", "Solar", "Wind", "Other", "2023"))
+
+for (i in 1:3) {
+ggplot(data = df_waterfall,
+       mapping = aes(x = XLabel, y = abs(Value), group = rev(Column), alpha = Column, fill = ChangeColour)) +
+  geom_col() +
+  geom_text(data = filter(df_waterfall, XLabel %in% c("2022", "2023"), Column == "Change"),
+            mapping = aes(x = XLabel, y = Value + 1, label = paste0(format(round(Value, 1), decimal.mark = ","),
+                                                                    " TWh")),
+            size = 2.5) +
+  geom_text(data = filter(df_waterfall, !XLabel %in% c("2022", "2023"), Column == "Change", Value <= 0),
+            mapping = aes(x = XLabel, 
+                          y = df_waterfall$Value[df_waterfall$Column == "Base" & df_waterfall$ChangeColour == "red"] - 1, 
+                          label = paste0(format(round(Value, 1), decimal.mark = ","), " TWh")),
+            size = 2.5, vjust = 1) +
+  geom_text(data = filter(df_waterfall, !XLabel %in% c("2022", "2023"), Column == "Change", Value > 0),
+            mapping = aes(x = XLabel, 
+                          y = df_waterfall$Value[df_waterfall$Column == "Base" & df_waterfall$ChangeColour == "blue"] + Value + 1, 
+                          label = paste0("+", format(round(Value, 1), decimal.mark = ","), " TWh")),
+            size = 2.5, vjust = 1) +
+  scale_fill_manual(values = c(CREG_blue2, CREG_grey2, CREG_red)) +
+  scale_alpha_manual(values = c(0, 1)) +
+  scale_y_continuous(name = element_blank(),
+                     breaks = seq(0, 100, 10),
+                     labels = scales::number_format(suffix = " TWh"),
+                     expand = c(0, 0)) +
+  scale_x_discrete(name = element_blank(),
+                   labels = Type[[i]]) +
+  coord_cartesian(ylim = c(70, 95),) +
+  labs(title = Title[i],
+       subtitle = Subtitle[i],
+       caption = Caption[i]) +
+  theme_CREG() +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        axis.line.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+ggsave(paste0("output/02 - yearly generation waterfall - ", Language[i], ".png"),
+       width = 16, height = 10, units = "cm", dpi = 900)
+}

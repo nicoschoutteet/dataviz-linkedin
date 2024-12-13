@@ -1,0 +1,125 @@
+library(tidyverse)
+library(httr)
+library(CREG)
+
+df <- read_delim("data/Elia ODP/ods032.csv",
+                 delim = ";") %>% 
+  mutate(DateTime = with_tz(Datetime, "Europe/Brussels"))
+
+
+# capacity ----------------------------------------------------------------
+df_year <- df %>%
+  filter(DateTime <= as.POSIXct("2024-09-30 00:00", "Europe/Brussels"),
+         (format(DateTime, "%d-%m %H:%M") == "01-12 00:00" | DateTime == as.POSIXct("2024-09-01 00:00", "Europe/Brussels"))) %>% 
+  mutate(Year = year(DateTime)) %>% 
+  select(Year, Capacity = `Monitored capacity`)
+
+ggplot(data = df_year,
+       mapping = aes(x = Year, y = Capacity / 1000)) +
+  geom_col(fill = CREG_yellow) +
+  geom_text(mapping = aes(y = Capacity / 1000 + .5,
+                          label = paste0(format(round(Capacity / 1000, 1), decimal.mark = ","), " GW")),
+            size = 2.5) +
+  scale_x_continuous(name = element_blank(),
+                     breaks = seq(2018, 2024, 1),
+                     labels = c(seq(2018, 2023, 1), "2024*")) +
+  scale_y_continuous(name = element_blank(),
+                     breaks = seq(0, 12, 2),
+                     labels = c(seq(0, 10, 2), "12 GW"),
+                     expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 12)) +
+  labs(title = "Deployment of solar photovoltaic capacity in Belgium",
+       subtitle = "Installed capacity, on 1 Dec. of each year, in GW",
+       caption = "Source: calculations CREG based on data Elia\nNote: for 2024, data is considered until 30 September") +
+  theme_CREG() +
+  theme(axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank())
+
+ggsave("output/installed pv.png",
+       width = 16, height = 10, units = "cm", dpi = 900)
+
+
+# production --------------------------------------------------------------
+df_month <- df %>% 
+  group_by(DateTime = as.Date(floor_date(DateTime, "1 month"),
+                              tz = "Europe/Brussels")) %>% 
+  summarize(Production = sum(`Measured & Upscaled`, na.rm = TRUE) / 4) %>% 
+  filter(DateTime < as.Date("2024-10-01"))
+
+ggplot(data = df_month,
+       mapping = aes(x = DateTime, y = Production / 1000)) +
+  geom_area(fill = CREG_yellow, alpha = .2) +
+  geom_line(colour = CREG_yellow) +
+  scale_y_continuous(name = element_blank(),
+                     breaks = seq(0, 1400, 200),
+                     labels = c(format(seq(0, 1200, 200), big.mark = ".", decimal.mark = ","), "1.400 GWh")) +
+  scale_x_date(name = element_blank(),
+               breaks = c(as.Date("2018-08-01"),
+                          seq.Date(as.Date("2019-01-01"), as.Date("2024-01-01"), "1 year"),
+                          as.Date("2024-09-01")),
+               labels = scales::label_date_short()) +
+  coord_cartesian(ylim = c(0, 1400),
+                  xlim = as.Date(c("2018-08-01", "2024-09-01")),
+                  expand = FALSE, clip = "off") +
+  labs(title = "Solar photovoltaic electricity production in Belgium",
+       subtitle = "Generated energy from solar PV, per month, in GWh",
+       caption = "Source: calculations CREG based on data Elia") +
+  theme_CREG() +
+  theme(axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = margin(.2, 1, .2, .2, "cm"))
+
+ggsave("output/solar production.png",
+       width = 16, height = 10, units = "cm", dpi = 900)
+
+
+# production as percentage of load ----------------------------------------
+df_solar <- read_delim("data/Elia ODP/ods032.csv",
+                             delim = ";") %>% 
+  mutate(DateTime = with_tz(Datetime, "Europe/Brussels"))
+
+df_load <- read_delim("data/Elia ODP/ods001.csv",
+                      delim = ";") %>% 
+  mutate(DateTime = with_tz(Datetime, "Europe/Brussels"))
+
+df <- left_join(df_load, df_solar,
+                by = "DateTime") %>% 
+  filter(between(DateTime, as.POSIXct("2018-08-01", "Europe/Brussels"),
+                 as.POSIXct("2024-08-31 23:45", "Europe/Brussels"))) %>% 
+  mutate(SolarShare = `Measured & Upscaled` / `Total Load`) %>% 
+  group_by(DateTime = as.Date(floor_date(DateTime, "1 month"), tz = "Europe/Brussels")) %>% 
+  summarize(Average = mean(SolarShare, na.rm = TRUE),
+            Maximum = max(SolarShare, na.rm = TRUE)) %>% 
+  pivot_longer(-DateTime, names_to = "Calculation", values_to = "Share")
+
+ggplot(data = df,
+       mapping = aes(x = DateTime, y = Share, colour = Calculation)) +
+  geom_line() +
+  geom_text(data = filter(df, DateTime == max(df$DateTime)),
+            mapping = aes(x = DateTime + months(1), label = Calculation),
+            size = 2.5, hjust = 0) +
+  scale_x_date(name = element_blank(),
+               breaks = c(as.Date("2018-08-01"),
+                          seq.Date(as.Date("2019-01-01"), as.Date("2024-01-01"), "1 year"),
+                          as.Date("2024-08-01")),
+               labels = scales::label_date_short()) +
+  scale_y_continuous(name = element_blank(),
+                     breaks = seq(0, 1, .2),
+                     labels = scales::percent_format()) +
+  scale_colour_manual(name = element_blank(),
+                      values = c(CREG_blue1, CREG_orange)) +
+  coord_cartesian(ylim = c(0, 1),
+                  xlim = as.Date(c("2018-08-01", "2024-08-01")),
+                  expand = FALSE, clip = "off") +
+  labs(title = "Share of electricity demand covered by solar photovoltaic",
+       subtitle = "Generated energy from solar PV as percentage of total load, per month, in TWh",
+       caption = "Source: calculations CREG based on data Elia") +
+  theme_CREG() +
+  theme(legend.position = "none",
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = margin(.2, 1.5, .2, .2, "cm"))
+
+ggsave("output/solar production share of load.png",
+       width = 16, height = 10, units = "cm", dpi = 900)
