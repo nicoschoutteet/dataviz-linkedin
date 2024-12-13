@@ -36,7 +36,7 @@ This repository contains R code snippets, used to generate data visualizations p
 
 ![](output/20241213%20-%20comparison%202022%20-%202024%20DA%20prices%20Belgium.png)
 
-👩‍💻 source code: [R/20241213 - comparison 2022 - 2024 DA prices Belgium.R]
+👩‍💻 source code: [R/20241213%20-%20comparison%202022%20-%202024%20DA%20prices%20Belgium.R]
 
 🔢 data sources: [Nord Pool Data Portal](https://data.nordpoolgroup.com/auction/day-ahead/prices?deliveryDate=latest&currency=EUR&aggregation=DeliveryPeriod&deliveryAreas=BE,FR,GER,NL)
 
